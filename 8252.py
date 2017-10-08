@@ -19,24 +19,26 @@ import numpy as np
 from random import randint
 import csv
 import time
-import visa
+#import visa
+import fakevisa as visa
 import signal
+import argparse
 
 
-def measure_current(voltage=8, steptime=1, duration=10, filename=None):
+def measure_current(savename=None, volt=8, step=1, hold=10, mode=2):
     Time = time.time()
-    stop = Time + duration  # figure out when to stop
+    stop = Time + hold  # figure out when to stop
 
     rm = visa.ResourceManager()
     inst = rm.open_resource('GPIB0::1::INSTR')
     inst.write('Z\n')  # reset unit
-    inst.write('SOV+%d\n' % voltage)  # set voltage
-    inst.write('F2\n')  # F2 = Current, F1 = Voltage, F3 = Resistance, F4 = Cap
+    inst.write('SOV+%d\n' % volt)  # set voltage
+    inst.write('F%d\n' % mode)  # F2 = Current, F1 = Voltage, F3 = Resistance, F4 = Cap
     inst.write('OPR\n')  # Operate
     data = []
     i = 0
     while time.time() < stop:
-        timer = float(duration - (time.time() - Time))
+        timer = float(hold - (time.time() - Time))
         out = inst.read()
         data.append([timer, float(out[3:])])
         print(data[i], 'sec, A')
@@ -44,12 +46,12 @@ def measure_current(voltage=8, steptime=1, duration=10, filename=None):
         # https://stackoverflow.com/questions/20576960/python-infinite-while-loop-break-on-user-input
 
         signal.signal(signal.SIGALRM, alarmHandler)
-        signal.alarm(steptime)
+        signal.alarm(step)
         try:
             # maybe better to do it this way...
             # https://stackoverflow.com/questions/13207678/whats-the-simplest-way-of-detecting-keyboard-input-in-python-from-the-terminal
             text = raw_input("Type q/Q + return to quit and save:")
-            signal.alarm(0)
+            signal.alarm(0)  # disable the alarm
             if "q" in text or "Q" in text:
                 print("Breaking")
                 break
@@ -59,8 +61,8 @@ def measure_current(voltage=8, steptime=1, duration=10, filename=None):
         i += 1
     inst.write('SBY\n')  # Standby
 
-    if filename:
-        with open(filename+'.csv', 'wb') as f:
+    if savename:
+        with open(savename+'.csv', 'wb') as f:
             writer = csv.writer(f)
             writer.writerows(data)
     print('Done')
@@ -73,20 +75,31 @@ class AlarmException(Exception):
 def alarmHandler(signum, frame):
     raise AlarmException
 
-
 if __name__ == '__main__':
-    location = [os.path.expanduser('~'), '_The_Universe', '_Materials_Engr',
-                '_Mat_Systems', '_BNT_BKT', '_CSD/', '_Data', 'EAPSI',
-                'Insitu/elec']
+    parser = argparse.ArgumentParser(description='Apply DC field and measure'
+            ' quantities with ADCMT 8252 electrometer')
+    # best to use string and not argparse.FileType
+    # https://stackoverflow.com/questions/18862836/how-to-open-file-using-argparse
+    parser.add_argument('-f', '--savename', type=str,
+                        help='.csv file to save data in',
+                        default=None)
+    parser.add_argument('-v', '--volt', type=float,
+                        help='DC voltage to apply',
+                        default=8.0)
+    parser.add_argument('-s', '--step', type=int,
+                        help='time [sec] between measurement steps',
+                        default=1)
+    parser.add_argument('-t', '--hold', type=float,
+                        help='Total application time [sec]',
+                        default=10.0)
+    parser.add_argument("-m", "--mode", type=int, choices=[1, 2, 3, 4],
+                        help="1=Voltage, 2=Current, 3=Resistance,4=Capacitance",
+                        default=2)
 
-    sample = b'EAPSI_c020_08_g6-02'
-    extra = "VU"
-    volts = 8
-    hold = 60
-    savename = os.path.join(os.path.join(*location),
-                            sample+"-"+str(volts)+extra)
+    args = parser.parse_args()
 
-    if not os.path.exists(savename + '.csv'):
-        measure_current(volts, 1, hold, savename)
-    else:
-        print("already a file")
+    if args.savename:
+        if not os.path.exists(args.savename) :
+            print("Already a file.\nUse diffrent name.")
+            sys.exit
+    measure_current(args.savename, args.volt, args.step, args.hold, args.mode)
