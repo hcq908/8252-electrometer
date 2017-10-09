@@ -19,8 +19,8 @@ import numpy as np
 from random import randint
 import csv
 import time
-#import visa
-import fakevisa as visa
+import visa
+# import fakevisa as visa
 import signal
 import argparse
 

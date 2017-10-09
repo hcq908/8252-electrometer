@@ -22,10 +22,9 @@ import numpy as np
 from random import randint
 import csv
 import time
-import signal
 from PyQt4 import QtCore, QtGui
-#import visa
-import fakevisa as visa
+import visa
+# import fakevisa as visa
 import gui_8252
 
 
